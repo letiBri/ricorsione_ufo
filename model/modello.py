@@ -1,7 +1,7 @@
 import copy
 
 from database.DAO import DAO
-import networkx as nx
+import networkx as nx  # libreria usata per gestire i grafi
 
 from model.sighting import Sighting
 
@@ -54,8 +54,62 @@ class Model:
     def cammino_ottimo(self):
         self._cammino_ottimo = []
         self._score_ottimo = 0
-
-        #TODO
-
+        for node in self._grafo.nodes():
+            parziale = [node]
+            rimanenti = self.calcola_rimanenti(parziale)
+            self._ricorsione(parziale, rimanenti)
         return self._cammino_ottimo, self._score_ottimo
 
+    def _ricorsione(self, parziale, nodi_rimanenti):  # parziale è una lista di nodi, nodi_rimanenti sono quelli da cui peschiamo
+        # la condizione terminale è definita dal fatto se non ho più nodi che posso raggiungere
+        # caso terminale
+        if len(nodi_rimanenti) == 0:
+            punteggio = self.calcolo_punteggio(parziale)
+            if punteggio > self._score_ottimo:
+                self._score_ottimo = punteggio
+                self._cammino_ottimo = copy.deepcopy(parziale)
+                print(self._cammino_ottimo)
+        # caso ricorsivo
+        else:
+            # per ogni nodo rimanente
+            for nodo in nodi_rimanenti:
+                # aggiungere il nodo
+                parziale.append(nodo)
+                # calcolare i nuovi rimanenti di questo nodo
+                nuovi_rimanenti = self.calcola_rimanenti(parziale)
+                # andare avanti nella ricorsione
+                self._ricorsione(parziale, nuovi_rimanenti)
+                # backtracking
+                parziale.pop()
+
+    def calcolo_punteggio(self, parziale):
+        punteggio = 0
+        # termine fisso
+        punteggio += 100 * len(parziale)  # aggiungo 100 per ogni nodo del parziale
+        # termine variabile
+        for i in range(1, len(parziale)):
+            if parziale[i].datetime.month == parziale[i-1].datetime.month:
+                punteggio += 200
+        return punteggio
+
+    def calcola_rimanenti(self, parziale):
+        nuovi_rimanenti = []
+        # prendiamo i nodi successivi
+        for i in self._grafo.successors(parziale[-1]):  # successors() restituisce un oggetto iteratore: dato un nodo, cioè l'ultimo messo nel parziale, la funzione trova i successivi
+            # di questi nodi, dobbiamo verificare il vincolo sul mese
+            if self.is_vincolo_ok(parziale, i) and self.is_vincolo_durata_ok(parziale, i):
+                nuovi_rimanenti.append(i)
+        return nuovi_rimanenti
+
+    def is_vincolo_durata_ok(self, parziale, nodo: Sighting):
+        return nodo.duration > parziale[-1].duration  # strettamente crescente
+
+    def is_vincolo_ok(self, parziale, nodo: Sighting):  # suggerisco all'editor che il nodo è un oggetto Sighting
+        mese = nodo.datetime.month
+        counter = 0
+        for i in parziale:
+            if i.datetime.month == mese:
+                counter += 1
+        if counter >= 3:
+            return False
+        return True
